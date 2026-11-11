@@ -15,7 +15,7 @@ export function Legend() {
         ))}
       </div>
       <p className="legend-hint">
-        클릭해서 해 고르기 · 끌어서 이동 · <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + 스크롤로 확대 · <kbd>←</kbd> <kbd>→</kbd> 해 이동 ·{' '}
+        클릭해서 해 고르기 · 끌어서 이동 · <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + 스크롤(터치는 두 손가락 벌리기)로 확대 · <kbd>←</kbd> <kbd>→</kbd> 해 이동 ·{' '}
         <kbd>[</kbd> <kbd>]</kbd> 사건 이동
       </p>
     </div>

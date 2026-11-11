@@ -100,17 +100,82 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
         onViewChange({ start: v.start + dy, end: v.end + dy });
       }
     };
+    // 두 손가락일 때 브라우저가 페이지를 스크롤·확대하지 않게 막는다(iOS Safari는 gesture* 이벤트도 막아야 한다).
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 1) e.preventDefault();
+    };
+    const onGesture = (e: Event) => e.preventDefault();
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('gesturestart', onGesture);
+    el.addEventListener('gesturechange', onGesture);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('gesturestart', onGesture);
+      el.removeEventListener('gesturechange', onGesture);
+    };
   }, [onViewChange]);
+
+  // 터치 두 손가락 핀치: 시작할 때 두 손가락 사이 중점의 연도를 고정하고, 손가락 간격에 반비례해 범위 폭을 바꾼다.
+  const touches = useRef(new Map<number, number>());
+  const pinch = useRef<{ view0: View; dist0: number; anchor: number } | null>(null);
+  const startPinch = () => {
+    const [a, b] = [...touches.current.values()];
+    const left = plotRef.current!.getBoundingClientRect().left;
+    pinch.current = {
+      view0: viewRef.current,
+      dist0: Math.max(20, Math.abs(a - b)),
+      anchor: yearAt((a + b) / 2 - left),
+    };
+    drag.current = null;
+  };
+  const endTouch = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    touches.current.delete(e.pointerId);
+    if (pinch.current) {
+      pinch.current = null;
+      drag.current = null;
+      // 한 손가락이 남으면 그 손가락으로 이어서 끌 수 있게 한다(탭으로 처리되지 않게 moved 표시).
+      const rest = [...touches.current.entries()][0];
+      if (rest) drag.current = { x0: rest[1], view0: viewRef.current, moved: true, pointerId: rest[0] };
+    }
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, e.clientX);
+      try {
+        plotRef.current!.setPointerCapture(e.pointerId);
+      } catch {
+        /* 이미 끝난 포인터면 무시 */
+      }
+      if (touches.current.size === 2) {
+        startPinch();
+        return;
+      }
+      if (touches.current.size > 2) return;
+    }
     const entryEl = (e.target as HTMLElement).closest<HTMLElement>('[data-entry]');
     drag.current = { x0: e.clientX, view0: view, moved: false, entryId: entryEl?.dataset.entry, pointerId: e.pointerId };
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const rect = plotRef.current!.getBoundingClientRect();
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, e.clientX);
+      const p = pinch.current;
+      if (p && touches.current.size >= 2) {
+        const [a, b] = [...touches.current.values()];
+        const k = p.dist0 / Math.max(20, Math.abs(a - b));
+        const span1 = (p.view0.end - p.view0.start) * k;
+        // 고정한 연도가 현재 중점 아래에 오도록 위치를 맞춘다(두 손가락으로 이동도 된다).
+        const frac = ((a + b) / 2 - rect.left) / width;
+        const start = p.anchor - frac * span1;
+        onViewChange({ start, end: start + span1 });
+        return;
+      }
+    }
     const d = drag.current;
     if (d && d.pointerId === e.pointerId) {
       const dx = e.clientX - d.x0;
@@ -128,7 +193,10 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
     if (e.pointerType === 'mouse') setHoverX(e.clientX - rect.left);
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    if (pinch.current) return endTouch(e);
+    endTouch(e);
     const d = drag.current;
+    if (d && d.pointerId !== e.pointerId) return;
     drag.current = null;
     if (!d || d.moved) return;
     if (d.entryId) onSelect(d.entryId);
@@ -200,7 +268,10 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={() => (drag.current = null)}
+        onPointerCancel={(e) => {
+          endTouch(e);
+          drag.current = null;
+        }}
         onPointerLeave={() => setHoverX(null)}
       >
         {/* 탐색 창과 눈금선 */}
