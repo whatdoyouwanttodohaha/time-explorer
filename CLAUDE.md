@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **시간 탐색기**: "같은 해, 다른 세계"를 보여주는 한국어 세계사 연표 앱. 기원전 4000년~2026년을 지역별 줄(트랙)로 나란히 놓고, 선택한 해 앞뒤에 각 지역에서 일어난 일을 비교한다.
 
 - 실제 소스는 `time-explorer/`에 있다(Vite + React 18 + TypeScript, 런타임 의존성은 React뿐).
-- 루트의 `index.html`과 `assets/`는 원본 소스가 없는 옛 "Chrono Atlas" 빌드 결과물(영어 UI)이다. 참고용으로만 두고 수정하지 않는다.
-- git 저장소가 아니다. 테스트와 린트 설정도 없다.
+- 테스트와 린트 설정은 없다.
 - UI 문구와 데이터는 모두 한국어로 쓴다.
 
 ## 명령어
