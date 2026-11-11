@@ -29,7 +29,7 @@ npx tsc -b        # 타입 검사만
 cat src/data/entries-*.ts | python3 -c "
 import re,sys; from collections import Counter
 s=sys.stdin.read(); rows=re.findall(r\"^  \['([^']+)', ([EPN]), '([a-z]+)', (-?\d+),\", s, re.M)
-tracks=set(re.findall(r\"id: '([a-z]+)',\n    name\", open('src/data/tracks.ts').read()))|{'world'}
+tracks=set(re.findall(r\"    id: '([a-z]+)',\n(?:    group: '[a-z]+',\n)?    name\", open('src/data/tracks.ts').read()))|{'world'}
 print('total', len(rows)); print('dup', [k for k,v in Counter(r[0] for r in rows).items() if v>1])
 print('bad', [r[0] for r in rows if r[2] not in tracks or int(r[3])==0])
 print(Counter(r[2] for r in rows).most_common())"
@@ -54,12 +54,22 @@ print(Counter(r[2] for r in rows).most_common())"
 | `steppe` | 중앙아시아 | `entries-steppe.ts` |
 | `wafrica` | 서아프리카 | `entries-westafrica.ts` |
 | `eafrica` | 동·남부 아프리카 | `entries-eastafrica.ts` |
-| `namerica` | 북미 | `entries-northamerica.ts` |
+| `namerica`, `usa`, `canada` | 북미 공통, 미국, 캐나다 | `entries-northamerica.ts` |
+| `europe`, `britain`, `france`, `germany`, `italy`, `spain`, `russia` | 유럽 공통과 나라별 줄 | `entries-europe.ts` |
+
+### 줄 묶음(접고 펴기)
+`tracks.ts`의 `GROUPS`가 묶음(동아시아, 유럽, 북미)을 정의하고, 줄은 `group`으로 묶음에 속한다. 같은 묶음의 줄은 `TRACKS` 안에서 연달아 있어야 한다.
+
+- 접은 묶음은 한 줄이다. 묶음의 요약 시대(`Group.periods`)와 하위 줄의 주요 사건만 보인다(중요도 2 이상, 1500년보다 넓게 볼 때는 3만).
+- 펼친 묶음은 얇은 머리 줄 아래에 하위 줄이 놓인다. 줄 배치는 `Timeline.tsx`의 `buildRows`가 펼침 상태에 따라 계산한다.
+- 펼침 상태는 `App.tsx`의 `openGroups`이고 URL 해시 `open=europe,namerica`로 남긴다. 기본값은 `DEFAULT_OPEN_GROUPS`다. 접힌 묶음 안의 항목을 고르면 그 묶음을 자동으로 편다.
+- 묶음마다 "공통" 줄이 있다(`europe`, `namerica`). 한 나라에 속하지 않는 사건을 둔다. 고대 그리스·로마는 유럽 공통에 있다.
+- 묶음 id와 그 안의 공통 줄 id가 같을 수 있다(`europe`, `namerica`). 서로 다른 이름 공간이다.
 
 **새 줄을 추가할 때:** `TRACKS`에 항목을 넣고, `entries-<지역>.ts`를 만들고, `entries.ts`에서 import와 spread를 추가한다.
 
 ### 시대 막대와 줄 높이
-같은 줄 안에서 기간이 겹치는 시대는 `lib/time.ts`의 `assignLanes`가 탐욕적으로 여러 줄(lane)로 쌓는다. 줄 높이는 lane 수에 비례하고, `Timeline.tsx`의 `ROWS`에서 모듈 로드 시 한 번만 계산한다.
+같은 줄 안에서 기간이 겹치는 시대는 `lib/time.ts`의 `assignLanes`가 탐욕적으로 여러 줄(lane)로 쌓는다. 줄 높이는 lane 수에 비례하고, `Timeline.tsx`의 `buildRows`에서 계산한다.
 
 연이어지는 시대는 같은 lane을 공유하지만, 길게 겹치는 시대는 lane을 하나씩 늘린다. 한 줄이 5~6 lane을 넘지 않게 하고, 넘으면 시대를 합치거나 빼거나 줄을 나눈다. 아프리카와 아메리카를 여러 줄로 나눈 이유가 이것이다. 시대를 바꾼 뒤에는 lane 수를 시뮬레이션해서 확인한다.
 
@@ -84,7 +94,7 @@ print(Counter(r[2] for r in rows).most_common())"
 
 ## 데이터 작성 규칙
 - **ID:** 모든 파일을 통틀어 고유해야 한다. 영문 소문자로 쓴다. 이미 중복이 여러 번 생겼으므로 추가 후 위 검증을 돌린다.
-- **줄 배정:** 한 사건은 한 줄에만 둔다. 여러 지역에 걸치면 가장 직접 관련된 줄에 두거나 `world`에 둔다.
+- **줄 배정:** 한 사건은 한 줄에만 둔다. 여러 지역에 걸치면 가장 직접 관련된 줄에 두거나 `world`에 둔다. 묶음 안에서 여러 나라에 걸치면 그 묶음의 공통 줄에 둔다.
 - **`summary`:** 1~2문장, '~했다'체로 쓴다. 학설이 갈리는 수치는 '추정', '~가량', 범위로 쓴다.
 - **`certainty`:**
   - `confirmed`: 사료로 확인된 연대

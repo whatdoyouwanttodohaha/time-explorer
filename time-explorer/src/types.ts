@@ -26,6 +26,17 @@ export interface Track {
   region: string;
   color: string;
   periods: Period[];
+  /** 속한 묶음(GROUPS)의 id. 같은 묶음의 줄은 TRACKS 안에서 연달아 있어야 한다. */
+  group?: string;
+}
+
+/** 여러 줄을 접고 펼 수 있게 묶은 것. periods는 접었을 때 보여 줄 요약 시대다. */
+export interface Group {
+  id: string;
+  name: string;
+  region: string;
+  color: string;
+  periods: Period[];
 }
 
 export interface Entry {

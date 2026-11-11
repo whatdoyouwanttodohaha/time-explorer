@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EntryKind } from './types';
 import { ENTRIES, ENTRY_BY_ID } from './data/entries';
+import { DEFAULT_OPEN_GROUPS, GROUP_BY_ID, TRACK_BY_ID } from './data/tracks';
 import { FULL_VIEW, type View, clampView, toYear, viewAround, windowFor } from './lib/time';
 import { Header } from './components/Header';
 import { Timeline } from './components/Timeline';
@@ -12,6 +13,13 @@ import { Legend } from './components/Legend';
 
 const ALL_KINDS: EntryKind[] = ['event', 'person', 'phenomenon'];
 const DEFAULT_YEAR = 1450;
+
+/** 해시의 open=a,b 를 읽는다. 없으면 기본값. */
+function readOpenGroups(): Set<string> {
+  const raw = new URLSearchParams(location.hash.slice(1)).get('open');
+  if (raw === null) return new Set(DEFAULT_OPEN_GROUPS);
+  return new Set(raw.split(',').filter((id) => GROUP_BY_ID[id]));
+}
 
 function readHash(): { year: number; entry: string | null } {
   const params = new URLSearchParams(location.hash.slice(1));
@@ -28,6 +36,16 @@ export default function App() {
   const [view, setView] = useState<View>(() => (initial.entry ? viewAround(initial.year, 600) : FULL_VIEW));
   const [kinds, setKinds] = useState<Set<EntryKind>>(() => new Set(ALL_KINDS));
   const [searchOpen, setSearchOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState(readOpenGroups);
+
+  const toggleGroup = useCallback((id: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -80,6 +98,9 @@ export default function App() {
       setSelectedId(id);
       if (id) {
         const e = ENTRY_BY_ID[id];
+        // 접힌 묶음 안의 항목이면 묶음을 펼쳐 표식이 보이게 한다.
+        const g = TRACK_BY_ID[e.track]?.group;
+        if (g) setOpenGroups((prev) => (prev.has(g) ? prev : new Set(prev).add(g)));
         const span = viewRef.current.end - viewRef.current.start;
         goToYear(e.year, span > 1500 ? { zoomSpan: 600 } : {});
       }
@@ -111,13 +132,16 @@ export default function App() {
   // URL 해시에 현재 위치 기록 (공유 가능한 링크)
   useEffect(() => {
     const hash = selectedId ? `e=${selectedId}` : `y=${year}`;
-    history.replaceState(null, '', `#${hash}`);
-  }, [year, selectedId]);
+    const open = [...openGroups].sort().join(',');
+    const isDefault = open === [...DEFAULT_OPEN_GROUPS].sort().join(',');
+    history.replaceState(null, '', `#${hash}${isDefault ? '' : `&open=${open}`}`);
+  }, [year, selectedId, openGroups]);
 
   // 주소창에서 해시를 직접 바꾼 경우 (replaceState는 이 이벤트를 일으키지 않는다)
   useEffect(() => {
     const onHash = () => {
       const h = readHash();
+      setOpenGroups(readOpenGroups());
       if (h.entry) selectEntry(h.entry);
       else {
         setSelectedId(null);
@@ -232,6 +256,8 @@ export default function App() {
           year={year}
           entries={visibleEntries}
           selectedId={selectedId}
+          openGroups={openGroups}
+          onToggleGroup={toggleGroup}
           onViewChange={changeView}
           onYearChange={(y) => setYear(toYear(y))}
           onSelect={selectEntry}

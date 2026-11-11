@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Entry, Track } from '../types';
-import { ERAS, TRACKS } from '../data/tracks';
+import type { Entry, Period } from '../types';
+import { ERAS, GROUP_BY_ID, TRACKS, TRACK_BY_ID } from '../data/tracks';
 import {
   type View,
   assignLanes,
@@ -20,33 +20,76 @@ const LANE_H = 20;
 const LANE_GAP = 3;
 const ROW_PAD = 7;
 
+const GROUP_HEAD_H = 30;
+
 interface RowLayout {
-  track: Track;
+  id: string;
+  /** track: 묶이지 않은 줄, child: 펼친 묶음의 하위 줄, closed: 접은 묶음, head: 펼친 묶음의 머리 줄 */
+  type: 'track' | 'child' | 'closed' | 'head';
+  name: string;
+  region: string;
+  color: string;
+  periods: Period[];
+  /** 이 줄에 표식을 그릴 트랙들 */
+  trackIds: string[];
+  groupId?: string;
   top: number;
   height: number;
   lanes: Map<string, number>;
   eventsTop: number;
 }
 
-const ROWS: RowLayout[] = (() => {
+/** 펼친 묶음에 따라 줄 배치를 계산한다. */
+function buildRows(open: Set<string>): RowLayout[] {
+  const rows: RowLayout[] = [];
   let top = RULER_H + ERA_H;
-  return TRACKS.map((track) => {
-    const { lanes, count } = assignLanes(track.periods);
-    const laneCount = track.periods.length ? count : 0;
-    const height = ROW_PAD * 2 + EVENT_H + laneCount * (LANE_H + LANE_GAP);
-    const row = { track, top, height, lanes, eventsTop: top + ROW_PAD };
+  const push = (r: Omit<RowLayout, 'top' | 'height' | 'lanes' | 'eventsTop'>) => {
+    const { lanes, count } = assignLanes(r.periods);
+    const laneCount = r.periods.length ? count : 0;
+    const height = r.type === 'head' ? GROUP_HEAD_H : ROW_PAD * 2 + EVENT_H + laneCount * (LANE_H + LANE_GAP);
+    rows.push({ ...r, top, height, lanes, eventsTop: top + ROW_PAD });
     top += height;
-    return row;
-  });
-})();
-
-export const TIMELINE_HEIGHT = ROWS[ROWS.length - 1].top + ROWS[ROWS.length - 1].height;
+  };
+  const seen = new Set<string>();
+  for (const track of TRACKS) {
+    const g = track.group ? GROUP_BY_ID[track.group] : undefined;
+    if (g && !seen.has(g.id)) {
+      seen.add(g.id);
+      const isOpen = open.has(g.id);
+      push({
+        id: `group:${g.id}`,
+        type: isOpen ? 'head' : 'closed',
+        name: g.name,
+        region: g.region,
+        color: g.color,
+        periods: isOpen ? [] : g.periods,
+        trackIds: isOpen ? [] : TRACKS.filter((t) => t.group === g.id).map((t) => t.id),
+        groupId: g.id,
+      });
+    }
+    if (g && !open.has(g.id)) continue;
+    push({
+      id: track.id,
+      type: g ? 'child' : 'track',
+      name: track.name,
+      region: track.region,
+      color: track.color,
+      periods: track.periods,
+      trackIds: [track.id],
+      groupId: g?.id,
+    });
+  }
+  return rows;
+}
 
 interface Props {
   view: View;
   year: number;
   entries: Entry[];
   selectedId: string | null;
+  /** 펼쳐 둔 묶음 id */
+  openGroups: Set<string>;
+  onToggleGroup: (id: string) => void;
   onViewChange: (v: View) => void;
   onYearChange: (y: number) => void;
   onSelect: (id: string) => void;
@@ -57,7 +100,19 @@ type LabelSide = 'right' | 'left';
 /** 한글 라벨의 대략적인 픽셀 너비 (12px 기준) */
 const labelWidth = (text: string) => text.length * 11.5 + 6;
 
-export function Timeline({ view, year, entries, selectedId, onViewChange, onYearChange, onSelect }: Props) {
+export function Timeline({
+  view,
+  year,
+  entries,
+  selectedId,
+  openGroups,
+  onToggleGroup,
+  onViewChange,
+  onYearChange,
+  onSelect,
+}: Props) {
+  const rows = useMemo(() => buildRows(openGroups), [openGroups]);
+  const height = rows[rows.length - 1].top + rows[rows.length - 1].height;
   const plotRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const [hoverX, setHoverX] = useState<number | null>(null);
@@ -209,9 +264,12 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
   // 트랙마다 라벨이 겹치지 않도록 중요도 순으로 자리를 잡는다.
   const markers = useMemo(() => {
     const out: { entry: Entry; left: number; top: number; label: LabelSide | null }[] = [];
-    for (const row of ROWS) {
+    for (const row of rows) {
+      if (!row.trackIds.length) continue;
+      // 접은 묶음은 여러 줄을 한 줄에 합치므로 주요 사건만(넓게 볼 때는 핵심만) 보여 준다.
+      const minImp = row.type === 'closed' ? (span > 1500 ? 3 : 2) : 1;
       const own = entries
-        .filter((en) => en.track === row.track.id)
+        .filter((en) => row.trackIds.includes(en.track) && en.importance >= minImp)
         .map((en) => ({ en, left: ((en.year - view.start) / span) * width }))
         .filter((m) => m.left > -40 && m.left < width + 40);
       const order = [...own].sort(
@@ -243,28 +301,47 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
       }
     }
     return out;
-  }, [entries, view, span, width, year]);
+  }, [entries, rows, view, span, width, year]);
 
   const cursorX = x(year);
 
   return (
     <section className="timeline" aria-label="연표">
-      <div className="tl-labels" style={{ height: TIMELINE_HEIGHT }}>
+      <div className="tl-labels" style={{ height }}>
         <div className="tl-label tl-label--era" style={{ top: RULER_H, height: ERA_H }}>
           시대
         </div>
-        {ROWS.map((r) => (
-          <div key={r.track.id} className="tl-label" style={{ top: r.top, height: r.height }} title={r.track.region}>
-            <span className="tl-swatch" style={{ background: r.track.color }} />
-            <span className="tl-label-name">{r.track.name}</span>
-          </div>
-        ))}
+        {rows.map((r) =>
+          r.type === 'closed' || r.type === 'head' ? (
+            <button
+              key={r.id}
+              className={`tl-label tl-label--group${r.type === 'head' ? ' is-open' : ''}`}
+              style={{ top: r.top, height: r.height }}
+              title={`${r.region} · 눌러서 ${r.type === 'head' ? '접기' : '펼치기'}`}
+              aria-expanded={r.type === 'head'}
+              onClick={() => onToggleGroup(r.groupId!)}
+            >
+              <span className="tl-chevron" aria-hidden />
+              <span className="tl-label-name">{r.name}</span>
+            </button>
+          ) : (
+            <div
+              key={r.id}
+              className={`tl-label${r.type === 'child' ? ' tl-label--child' : ''}`}
+              style={{ top: r.top, height: r.height }}
+              title={r.region}
+            >
+              <span className="tl-swatch" style={{ background: r.color }} />
+              <span className="tl-label-name">{r.name}</span>
+            </div>
+          ),
+        )}
       </div>
 
       <div
         ref={plotRef}
         className="tl-plot"
-        style={{ height: TIMELINE_HEIGHT }}
+        style={{ height }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -312,13 +389,13 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
         </div>
 
         {/* 문명별 시대 막대 */}
-        {ROWS.map((row, ri) => (
+        {rows.map((row, ri) => (
           <div
-            key={row.track.id}
-            className={`tl-row${ri % 2 ? ' tl-row--alt' : ''}`}
-            style={{ top: row.top, height: row.height, ['--c' as string]: row.track.color }}
+            key={row.id}
+            className={`tl-row${ri % 2 ? ' tl-row--alt' : ''}${row.type === 'head' ? ' tl-row--head' : ''}`}
+            style={{ top: row.top, height: row.height, ['--c' as string]: row.color }}
           >
-            {row.track.periods.map((p) => {
+            {row.periods.map((p) => {
               const l = x(p.start);
               const r = x(p.end);
               if (r < 0 || l > width) return null;
@@ -345,7 +422,7 @@ export function Timeline({ view, year, entries, selectedId, onViewChange, onYear
 
         {/* 사건 표식 */}
         {markers.map(({ entry, left, top, label }) => {
-          const track = ROWS.find((r) => r.track.id === entry.track)!.track;
+          const track = TRACK_BY_ID[entry.track];
           return (
             <button
               key={entry.id}
