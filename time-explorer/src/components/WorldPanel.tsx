@@ -1,5 +1,6 @@
 import type { Entry } from '../types';
 import { TRACKS } from '../data/tracks';
+import { RULERS } from '../data/rulers';
 import { formatRange, formatYear } from '../lib/time';
 
 interface Props {
@@ -23,10 +24,13 @@ function relative(y: number, base: number): string {
 export function WorldPanel({ year, window, entries, onSelect, onPrev, onNext }: Props) {
   const cards = TRACKS.map((track) => {
     const periods = track.periods.filter((p) => year >= p.start && year < p.end);
+    const rulers = (RULERS[track.id] ?? []).flatMap((lane) =>
+      lane.rulers.filter((r) => year >= r.start && year < r.end).map((r) => ({ lane, r })),
+    );
     const near = entries
       .filter((e) => e.track === track.id && Math.abs(e.year - year) <= window)
       .sort((a, b) => Math.abs(a.year - year) - Math.abs(b.year - year) || b.importance - a.importance);
-    return { track, periods, near };
+    return { track, periods, rulers, near };
   });
   const total = cards.reduce((n, c) => n + c.near.length, 0);
   const activeCards = cards.filter((c) => c.periods.length || c.near.length);
@@ -53,7 +57,7 @@ export function WorldPanel({ year, window, entries, onSelect, onPrev, onNext }: 
       </div>
 
       <div className="world-grid">
-        {activeCards.map(({ track, periods, near }) => (
+        {activeCards.map(({ track, periods, rulers, near }) => (
           <article key={track.id} className="card" style={{ ['--c' as string]: track.color }}>
             <header className="card-head">
               <span className="tl-swatch" style={{ background: track.color }} />
@@ -63,6 +67,13 @@ export function WorldPanel({ year, window, entries, onSelect, onPrev, onNext }: 
               <p key={p.id} className="card-period">
                 {p.name}
                 <span className="card-period-range">{formatRange(p.start, p.end)}</span>
+              </p>
+            ))}
+            {rulers.map(({ lane, r }) => (
+              <p key={r.id} className="card-ruler">
+                <span className="card-ruler-lane">{lane.name}</span>
+                {r.name}
+                <span className="card-period-range">{formatRange(r.start, r.end)}</span>
               </p>
             ))}
             {near.length > 0 ? (

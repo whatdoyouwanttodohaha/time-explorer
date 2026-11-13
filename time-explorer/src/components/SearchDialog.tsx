@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ENTRIES } from '../data/entries';
 import { TRACKS, TRACK_BY_ID } from '../data/tracks';
+import { ALL_RULERS } from '../data/rulers';
 import { formatRange, formatYear, toYear } from '../lib/time';
 
 interface Props {
@@ -72,6 +73,20 @@ export function SearchDialog({ onClose, onPickEntry, onPickYear }: Props) {
           span: Math.max(60, (p.end - p.start) * 1.4),
           label: p.name,
           sub: `${t.name} · ${formatRange(p.start, p.end)}`,
+          color: t.color,
+        });
+      }
+    }
+    for (const { trackId, lane, ruler } of ALL_RULERS) {
+      if (ruler.name.toLowerCase().includes(query)) {
+        const t = TRACK_BY_ID[trackId];
+        out.push({
+          kind: 'period',
+          key: ruler.id,
+          year: Math.round((ruler.start + ruler.end) / 2) || 1,
+          span: Math.max(40, (ruler.end - ruler.start) * 3),
+          label: ruler.name,
+          sub: `${t.name} ${lane.name} · ${formatRange(ruler.start, ruler.end)}`,
           color: t.color,
         });
       }

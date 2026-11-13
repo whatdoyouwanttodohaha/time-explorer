@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Entry, Period } from '../types';
+import type { Entry, Period, RulerLane } from '../types';
 import { ERAS, GROUP_BY_ID, TRACKS, TRACK_BY_ID } from '../data/tracks';
+import { RULERS } from '../data/rulers';
 import {
   type View,
   assignLanes,
@@ -21,6 +22,8 @@ const LANE_GAP = 3;
 const ROW_PAD = 7;
 
 const GROUP_HEAD_H = 30;
+/** 지도자 재위 막대 높이 */
+const REIGN_H = 18;
 
 interface RowLayout {
   id: string;
@@ -30,6 +33,10 @@ interface RowLayout {
   region: string;
   color: string;
   periods: Period[];
+  /** 지도자 재위 lane (펼친 나라 줄에만) */
+  rulerLanes: RulerLane[];
+  /** 첫 재위 lane의 top (줄 top 기준) */
+  reignTop: number;
   /** 이 줄에 표식을 그릴 트랙들 */
   trackIds: string[];
   groupId?: string;
@@ -43,11 +50,13 @@ interface RowLayout {
 function buildRows(open: Set<string>): RowLayout[] {
   const rows: RowLayout[] = [];
   let top = RULER_H + ERA_H;
-  const push = (r: Omit<RowLayout, 'top' | 'height' | 'lanes' | 'eventsTop'>) => {
+  const push = (r: Omit<RowLayout, 'top' | 'height' | 'lanes' | 'eventsTop' | 'reignTop'>) => {
     const { lanes, count } = assignLanes(r.periods);
     const laneCount = r.periods.length ? count : 0;
-    const height = r.type === 'head' ? GROUP_HEAD_H : ROW_PAD * 2 + EVENT_H + laneCount * (LANE_H + LANE_GAP);
-    rows.push({ ...r, top, height, lanes, eventsTop: top + ROW_PAD });
+    const reignTop = ROW_PAD + EVENT_H + laneCount * (LANE_H + LANE_GAP) + (r.rulerLanes.length ? 2 : 0);
+    const height =
+      r.type === 'head' ? GROUP_HEAD_H : reignTop + r.rulerLanes.length * (REIGN_H + LANE_GAP) + ROW_PAD;
+    rows.push({ ...r, top, height, lanes, eventsTop: top + ROW_PAD, reignTop });
     top += height;
   };
   const seen = new Set<string>();
@@ -63,6 +72,7 @@ function buildRows(open: Set<string>): RowLayout[] {
         region: g.region,
         color: g.color,
         periods: isOpen ? [] : g.periods,
+        rulerLanes: [],
         trackIds: isOpen ? [] : TRACKS.filter((t) => t.group === g.id).map((t) => t.id),
         groupId: g.id,
       });
@@ -75,6 +85,7 @@ function buildRows(open: Set<string>): RowLayout[] {
       region: track.region,
       color: track.color,
       periods: track.periods,
+      rulerLanes: RULERS[track.id] ?? [],
       trackIds: [track.id],
       groupId: g?.id,
     });
@@ -333,6 +344,15 @@ export function Timeline({
             >
               <span className="tl-swatch" style={{ background: r.color }} />
               <span className="tl-label-name">{r.name}</span>
+              {r.rulerLanes.map((l, i) => (
+                <span
+                  key={l.id}
+                  className="tl-lane-label"
+                  style={{ top: r.reignTop + i * (REIGN_H + LANE_GAP), height: REIGN_H }}
+                >
+                  {l.name}
+                </span>
+              ))}
             </div>
           ),
         )}
@@ -417,6 +437,29 @@ export function Timeline({
                 </div>
               );
             })}
+            {row.rulerLanes.map((lane, li) =>
+              lane.rulers.map((p, pi) => {
+                const l = x(p.start);
+                const r = x(p.end);
+                if (r < 0 || l > width) return null;
+                const active = year >= p.start && year < p.end;
+                return (
+                  <div
+                    key={p.id}
+                    className={`tl-reign${pi % 2 ? ' tl-reign--alt' : ''}${active ? ' is-active' : ''}`}
+                    style={{
+                      left: l,
+                      width: Math.max(2, r - l),
+                      top: row.reignTop + li * (REIGN_H + LANE_GAP),
+                      height: REIGN_H,
+                    }}
+                    title={`${lane.name} · ${p.name} · ${formatRange(p.start, p.end)}${p.note ? `\n${p.note}` : ''}`}
+                  >
+                    {r - l > 24 && <span style={{ paddingLeft: Math.max(0, -l) + 4 }}>{p.name}</span>}
+                  </div>
+                );
+              }),
+            )}
           </div>
         ))}
 

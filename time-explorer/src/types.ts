@@ -30,6 +30,14 @@ export interface Track {
   group?: string;
 }
 
+/** 한 줄 안의 지도자 재위 막대 lane (예: 영국의 군주, 총리) */
+export interface RulerLane {
+  id: string;
+  name: string;
+  /** 시간순, 서로 겹치지 않는 재위 기간 */
+  rulers: Period[];
+}
+
 /** 여러 줄을 접고 펼 수 있게 묶은 것. periods는 접었을 때 보여 줄 요약 시대다. */
 export interface Group {
   id: string;

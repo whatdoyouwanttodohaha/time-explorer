@@ -579,6 +579,54 @@ kbd {
   font-weight: 600;
 }
 
+.tl-reign {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c) 6%, transparent);
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--ink) 75%, var(--c));
+}
+
+/* 이웃한 재위끼리 구분되게 번갈아 칠한다 */
+.tl-reign--alt {
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+
+.tl-reign span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-reign.is-active {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 30%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tl-lane-label {
+  position: absolute;
+  left: 14px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tl-label--child .tl-lane-label {
+  left: 24px;
+}
+
 .tl-marker {
   --s: 10px;
   position: absolute;
@@ -882,6 +930,20 @@ kbd {
   font-size: 16px;
   font-weight: 700;
   color: color-mix(in srgb, var(--ink) 75%, var(--c));
+}
+
+.card-ruler {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 12.5px;
+}
+
+.card-ruler-lane {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .card-period-range {
@@ -1240,6 +1302,14 @@ kbd {
 
   .tl-label--child {
     padding-left: 14px;
+  }
+
+  .tl-lane-label {
+    left: 8px;
+  }
+
+  .tl-label--child .tl-lane-label {
+    left: 14px;
   }
 
   .tl-label--group.is-open {
